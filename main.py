@@ -102,7 +102,7 @@ def run_bot():
                 if qty <= 0:
                     log(f"{symbol}: insufficient buying power, skipping.")
                     continue
-                order = ac.place_market_order(symbol, qty, "buy")
+                order = ac.place_market_order(symbol, qty, "buy", asset_classes[symbol])
                 filled = ac.wait_for_fill(order.id)
                 fill_price = float(filled.filled_avg_price) if filled.filled_avg_price else price
                 fill_qty = float(filled.filled_qty) if filled.filled_qty else qty

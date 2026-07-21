@@ -49,13 +49,15 @@ def get_bars(symbol: str, asset_class: str, bars: int = config.LOOKBACK_BARS):
     return barset[symbol]
 
 
-def place_market_order(symbol: str, qty: float, side: str):
+def place_market_order(symbol: str, qty: float, side: str, asset_class: str = "stock"):
     order_side = OrderSide.BUY if side == "buy" else OrderSide.SELL
+    # Alpaca requires GTC (not DAY) time-in-force for crypto orders.
+    tif = TimeInForce.GTC if asset_class == "crypto" else TimeInForce.DAY
     req = MarketOrderRequest(
         symbol=symbol,
         qty=qty,
         side=order_side,
-        time_in_force=TimeInForce.DAY,
+        time_in_force=tif,
     )
     return trading_client.submit_order(req)
 
