@@ -5,6 +5,9 @@ on:
     - cron: "*/5 * * * *"   # every 5 minutes, 24/7
   workflow_dispatch:         # also lets you trigger it manually in GitHub UI
 
+permissions:
+  contents: write   # needed so the workflow can commit trades.xlsx back to the repo
+
 jobs:
   trade:
     runs-on: ubuntu-latest
@@ -28,6 +31,12 @@ jobs:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           ALPACA_BASE_URL: https://paper-api.alpaca.markets
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
         run: python run_once.py
+
+      - name: Commit updated trade log
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "trading-bot@users.noreply.github.com"
+          git add trades.xlsx
+          git diff --cached --quiet && echo "No new trades this cycle." || \
+            (git commit -m "Update trade log [skip ci]" && git pull --rebase && git push)

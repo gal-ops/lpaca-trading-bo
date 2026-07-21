@@ -1,7 +1,7 @@
 from datetime import datetime
 import alpaca_client as ac
 import strategy
-import sheets_client
+import excel_client
 import config
 
 
@@ -63,7 +63,7 @@ def run_bot():
 
             order = ac.close_position(symbol)
             log(f"SELL {qty} {symbol} @ ~${exit_price:.4f} | P&L=${pnl_usd:,.2f} ({pnl_pct:.2f}%) | order_id={order.id}")
-            sheets_client.log_trade(
+            excel_client.log_trade(
                 symbol, asset_classes[symbol], "sell", qty, exit_price,
                 result["reason"], pnl_usd, pnl_pct, str(order.id),
             )
@@ -86,7 +86,7 @@ def run_bot():
                     continue
                 order = ac.place_market_order(symbol, qty, "buy")
                 log(f"BUY {qty} {symbol} @ ~${price:.4f} | order_id={order.id}")
-                sheets_client.log_trade(
+                excel_client.log_trade(
                     symbol, asset_classes[symbol], "buy", qty, price,
                     result["reason"], order_id=str(order.id),
                 )
@@ -114,7 +114,7 @@ def run_bot():
                 pnl_usd = (exit_price - entry_price) * qty
                 order = ac.close_position(symbol)
                 log(f"{reason.upper()}: closing {symbol} | P&L=${pnl_usd:,.2f} | order_id={order.id}")
-                sheets_client.log_trade(
+                excel_client.log_trade(
                     symbol, asset_class, "sell", qty, exit_price,
                     reason, pnl_usd, pnl_pct * 100, str(order.id),
                 )

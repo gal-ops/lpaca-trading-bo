@@ -2,34 +2,27 @@
 
 Paper-trades a watchlist of stocks and crypto pairs on Alpaca using an EMA/RSI
 strategy, runs every 5 minutes via GitHub Actions (24/7 — crypto never sleeps),
-and logs every buy/sell to a Google Sheet with the reason, price, and realized
-P&L, plus a live win/loss summary.
+and logs every buy/sell to an Excel file (`trades.xlsx`) with the reason,
+price, and realized P&L, plus a live win/loss summary. No Google account or
+billing needed — the workflow commits the updated spreadsheet straight back
+into the repo after each run.
 
 ## 1. Alpaca paper account
 
 1. Sign up at https://alpaca.markets and open a **paper trading** account.
 2. Generate an API key + secret from the paper trading dashboard.
 
-## 2. Google Sheets logging (~5 minutes)
+## 2. Trade log
 
-1. Go to https://console.cloud.google.com, create a new project (or reuse one).
-2. In "APIs & Services" → "Library", enable:
-   - **Google Sheets API**
-   - **Google Drive API**
-3. Go to "IAM & Admin" → "Service Accounts" → "Create Service Account".
-   Name it anything (e.g. `trading-bot`). No special role is needed.
-4. Open the new service account → "Keys" → "Add Key" → "Create new key" → JSON.
-   This downloads a `.json` file — keep it private.
-5. Copy the service account's email address (looks like
-   `trading-bot@your-project.iam.gserviceaccount.com`).
-6. Create a new Google Sheet (blank is fine). Click "Share" and give that
-   service account email **Editor** access.
-7. Copy the Sheet ID from the URL:
-   `https://docs.google.com/spreadsheets/d/`**`THIS_PART`**`/edit`
+The bot auto-creates `trades.xlsx` (in the repo root) the first time it logs
+a trade, with two tabs:
+- **Trades** — one row per buy/sell: timestamp, symbol, asset class, side,
+  qty, price, value, reason, realized P&L ($ and %), order ID.
+- **Summary** — total trades, wins, losses, win rate %, total realized P&L,
+  computed with live Excel formulas so it can't drift from the trade rows.
 
-The bot will auto-create a `Trades` tab (one row per buy/sell, with the
-reason and realized P&L) and a `Summary` tab (total trades, wins, losses,
-win rate %, total P&L — computed with live Sheets formulas).
+Nothing to set up here — just make sure `trades.xlsx` is committed (it's not
+gitignored) so GitHub Actions can update it run over run.
 
 ## 3. Local setup
 
@@ -46,8 +39,6 @@ Create a `.env` file (gitignored) in this directory:
 ALPACA_API_KEY=your_paper_key
 ALPACA_SECRET_KEY=your_paper_secret
 ALPACA_BASE_URL=https://paper-api.alpaca.markets
-GOOGLE_SERVICE_ACCOUNT_JSON={"type": "service_account", ...paste the whole JSON key here, one line...}
-GOOGLE_SHEET_ID=your_sheet_id
 ```
 
 Test a single cycle:
@@ -80,12 +71,13 @@ Actions → New repository secret**, and add:
 
 - `ALPACA_API_KEY`
 - `ALPACA_SECRET_KEY`
-- `GOOGLE_SERVICE_ACCOUNT_JSON` (paste the entire JSON key file contents)
-- `GOOGLE_SHEET_ID`
 
 The workflow in `.github/workflows/trading_bot.yml` runs every 5 minutes via
 cron, and can also be triggered manually from the Actions tab
-("Run workflow").
+("Run workflow"). After each run, it commits any new rows in `trades.xlsx`
+straight back to the repo using the automatic `GITHUB_TOKEN` — no extra
+secret needed for that part. Just download/pull the repo whenever you want
+to check the spreadsheet, or view it directly on GitHub.
 
 ## Strategy notes
 

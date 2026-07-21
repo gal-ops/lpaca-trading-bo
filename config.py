@@ -7,8 +7,7 @@ API_KEY = os.getenv("ALPACA_API_KEY")
 SECRET_KEY = os.getenv("ALPACA_SECRET_KEY")
 BASE_URL = os.getenv("ALPACA_BASE_URL", "https://paper-api.alpaca.markets")
 
-GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
-GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
+EXCEL_FILE = os.getenv("EXCEL_FILE", "trades.xlsx")
 
 # Stocks the bot will trade — high-volatility picks for aggressive plays
 STOCK_WATCHLIST = [
