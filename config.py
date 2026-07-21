@@ -20,6 +20,7 @@ STOCK_WATCHLIST = [
 CRYPTO_WATCHLIST = ["BTC/USD", "ETH/USD", "SOL/USD"]
 
 # Strategy parameters — relaxed thresholds = more frequent trades
+BAR_MINUTES = 15   # 15-min bars react up to 4x faster than the old hourly bars
 EMA_FAST = 9
 EMA_SLOW = 21
 RSI_PERIOD = 14

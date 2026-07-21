@@ -3,7 +3,7 @@ from alpaca.data.historical import StockHistoricalDataClient, CryptoHistoricalDa
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
 from alpaca.data.requests import StockBarsRequest, CryptoBarsRequest
-from alpaca.data.timeframe import TimeFrame
+from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 from datetime import datetime, timedelta
 import time
 import config
@@ -27,13 +27,17 @@ def get_open_orders():
     return trading_client.get_orders()
 
 
+BAR_TIMEFRAME = TimeFrame(config.BAR_MINUTES, TimeFrameUnit.Minute)
+
+
 def get_bars(symbol: str, asset_class: str, bars: int = config.LOOKBACK_BARS):
     """asset_class is 'stock' or 'crypto'."""
-    start = datetime.now() - timedelta(days=bars * 2)
+    # Fetch enough calendar time to cover `bars` bars even across market closures.
+    start = datetime.now() - timedelta(minutes=config.BAR_MINUTES * bars * 6)
     if asset_class == "crypto":
         request = CryptoBarsRequest(
             symbol_or_symbols=symbol,
-            timeframe=TimeFrame.Hour,
+            timeframe=BAR_TIMEFRAME,
             start=start,
             limit=bars,
         )
@@ -41,7 +45,7 @@ def get_bars(symbol: str, asset_class: str, bars: int = config.LOOKBACK_BARS):
     else:
         request = StockBarsRequest(
             symbol_or_symbols=symbol,
-            timeframe=TimeFrame.Hour,
+            timeframe=BAR_TIMEFRAME,
             start=start,
             limit=bars,
         )
