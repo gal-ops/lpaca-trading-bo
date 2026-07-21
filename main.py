@@ -57,13 +57,16 @@ def run_bot():
         try:
             pos = positions[symbol]
             entry_price = float(pos.avg_entry_price)
-            exit_price = last_prices[symbol]
-            qty = float(pos.qty)
+
+            order = ac.close_position(symbol)
+            filled = ac.wait_for_fill(order.id)
+            exit_price = float(filled.filled_avg_price) if filled.filled_avg_price else last_prices[symbol]
+            qty = float(filled.filled_qty) if filled.filled_qty else float(pos.qty)
+
             pnl_usd = (exit_price - entry_price) * qty
             pnl_pct = (exit_price - entry_price) / entry_price * 100 if entry_price else 0
 
-            order = ac.close_position(symbol)
-            log(f"SELL {qty} {symbol} @ ~${exit_price:.4f} | P&L=${pnl_usd:,.2f} ({pnl_pct:.2f}%) | order_id={order.id}")
+            log(f"SELL {qty} {symbol} @ ${exit_price:.4f} | P&L=${pnl_usd:,.2f} ({pnl_pct:.2f}%) | order_id={order.id}")
             excel_client.log_trade(
                 symbol, asset_classes[symbol], "sell", qty, exit_price,
                 result["reason"], pnl_usd, pnl_pct, str(order.id),
@@ -100,9 +103,12 @@ def run_bot():
                     log(f"{symbol}: insufficient buying power, skipping.")
                     continue
                 order = ac.place_market_order(symbol, qty, "buy")
-                log(f"BUY {qty} {symbol} @ ~${price:.4f} | order_id={order.id}")
+                filled = ac.wait_for_fill(order.id)
+                fill_price = float(filled.filled_avg_price) if filled.filled_avg_price else price
+                fill_qty = float(filled.filled_qty) if filled.filled_qty else qty
+                log(f"BUY {fill_qty} {symbol} @ ${fill_price:.4f} | order_id={order.id}")
                 excel_client.log_trade(
-                    symbol, asset_classes[symbol], "buy", qty, price,
+                    symbol, asset_classes[symbol], "buy", fill_qty, fill_price,
                     result["reason"], order_id=str(order.id),
                 )
                 num_positions += 1
@@ -124,14 +130,17 @@ def run_bot():
 
             if reason:
                 entry_price = float(pos.avg_entry_price)
-                qty = float(pos.qty)
-                exit_price = float(pos.current_price)
-                pnl_usd = (exit_price - entry_price) * qty
                 order = ac.close_position(symbol)
+                filled = ac.wait_for_fill(order.id)
+                exit_price = float(filled.filled_avg_price) if filled.filled_avg_price else float(pos.current_price)
+                qty = float(filled.filled_qty) if filled.filled_qty else float(pos.qty)
+
+                pnl_usd = (exit_price - entry_price) * qty
+                actual_pnl_pct = (exit_price - entry_price) / entry_price * 100 if entry_price else 0
                 log(f"{reason.upper()}: closing {symbol} | P&L=${pnl_usd:,.2f} | order_id={order.id}")
                 excel_client.log_trade(
                     symbol, asset_class, "sell", qty, exit_price,
-                    reason, pnl_usd, pnl_pct * 100, str(order.id),
+                    reason, pnl_usd, actual_pnl_pct, str(order.id),
                 )
         except Exception as e:
             log(f"{symbol} position check error: {e}")

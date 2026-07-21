@@ -5,6 +5,7 @@ from alpaca.trading.enums import OrderSide, TimeInForce
 from alpaca.data.requests import StockBarsRequest, CryptoBarsRequest
 from alpaca.data.timeframe import TimeFrame
 from datetime import datetime, timedelta
+import time
 import config
 
 
@@ -61,6 +62,22 @@ def place_market_order(symbol: str, qty: float, side: str):
 
 def close_position(symbol: str):
     return trading_client.close_position(symbol)
+
+
+def get_order(order_id):
+    return trading_client.get_order_by_id(order_id)
+
+
+def wait_for_fill(order_id, timeout: float = 8, poll_interval: float = 0.5):
+    """Poll until the order has a filled_avg_price, or timeout. Returns the
+    latest order object either way (falls back to unfilled if it times out)."""
+    elapsed = 0.0
+    order = get_order(order_id)
+    while order.filled_avg_price is None and elapsed < timeout:
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+        order = get_order(order_id)
+    return order
 
 
 def is_market_open():
