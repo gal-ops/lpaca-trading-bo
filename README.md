@@ -82,9 +82,15 @@ to check the spreadsheet, or view it directly on GitHub.
 ## Strategy notes
 
 - EMA9/EMA21 crossover + RSI14, same core signal for stocks and crypto.
+- **News research**: for every buy candidate, `news_client.py` pulls recent
+  headlines from Alpaca's free News API and scores them with a keyword-based
+  sentiment scan (bullish words like "beats estimates", "record revenue";
+  bearish words like "downgrade", "lawsuit", "recall"). This score is folded
+  into the ranking, and candidates with clearly bad news are vetoed even if
+  the technical signal says buy. No paid API or extra account needed.
 - When more symbols signal "buy" than there are open position slots
-  (max 6 by default), candidates are ranked by RSI/EMA momentum strength and
-  only the strongest are taken.
+  (max 6 by default), candidates are ranked by RSI/EMA momentum strength
+  *plus* news sentiment, and only the strongest are taken.
 - Stop-loss at -5%, take-profit at +12%, checked every cycle regardless of
   the strategy signal.
 - Config (watchlists, thresholds, risk sizing) lives in `config.py`.

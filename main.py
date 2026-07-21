@@ -2,6 +2,7 @@ from datetime import datetime
 import alpaca_client as ac
 import strategy
 import excel_client
+import news_client
 import config
 
 
@@ -71,10 +72,24 @@ def run_bot():
         except Exception as e:
             log(f"{symbol}: sell error — {e}")
 
-    # --- BUY: rank competing candidates, fill available slots ---
+    # --- BUY: research news, rank competing candidates, fill available slots ---
     available_slots = config.MAX_POSITIONS - num_positions
     if available_slots > 0:
-        buy_signals = {s: r for s, r in signals.items() if s not in positions}
+        buy_signals = {s: r for s, r in signals.items()
+                        if s not in positions and r["signal"] == "buy"}
+
+        # Free news research: fold headline sentiment into each candidate's
+        # score, and veto candidates with clearly bad news even if the
+        # technical signal says buy.
+        for symbol, result in buy_signals.items():
+            news = news_client.get_news_sentiment(symbol)
+            result["news_score"] = news["score"]
+            result["score"] += news["score"] * 2
+            result["reason"] += f'; news: "{news["headline"]}" (sentiment={news["score"]:+d})'
+            log(f"{symbol}: news sentiment={news['score']:+d} | \"{news['headline']}\"")
+
+        buy_signals = {s: r for s, r in buy_signals.items() if r["news_score"] > -2}
+
         ranked = strategy.rank_candidates(buy_signals, available_slots)
         for symbol in ranked:
             try:
