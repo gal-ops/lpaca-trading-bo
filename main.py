@@ -98,8 +98,8 @@ def run_bot():
             try:
                 result = signals[symbol]
                 price = last_prices[symbol]
-                qty = strategy.calculate_qty(account, price)
-                if qty <= 0:
+                qty = strategy.calculate_qty(account, price, asset_classes[symbol])
+                if qty <= 0.000001:
                     log(f"{symbol}: insufficient buying power, skipping.")
                     continue
                 order = ac.place_market_order(symbol, qty, "buy", asset_classes[symbol])

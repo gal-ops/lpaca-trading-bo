@@ -4,6 +4,7 @@ from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
 from alpaca.data.requests import StockBarsRequest, CryptoBarsRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+from alpaca.common.enums import Sort
 from datetime import datetime, timedelta
 import time
 import config
@@ -31,8 +32,14 @@ BAR_TIMEFRAME = TimeFrame(config.BAR_MINUTES, TimeFrameUnit.Minute)
 
 
 def get_bars(symbol: str, asset_class: str, bars: int = config.LOOKBACK_BARS):
-    """asset_class is 'stock' or 'crypto'."""
-    # Fetch enough calendar time to cover `bars` bars even across market closures.
+    """asset_class is 'stock' or 'crypto'.
+
+    Alpaca's bars API defaults to ascending (oldest-first) order, so combining
+    a wide `start` window with `limit` silently returns the *oldest* bars in
+    that window instead of the most recent ones. We fetch DESC (newest-first)
+    to guarantee freshness, then reverse to chronological order for the
+    indicator math in strategy.py, which expects bars[-1] to be the latest.
+    """
     start = datetime.now() - timedelta(minutes=config.BAR_MINUTES * bars * 6)
     if asset_class == "crypto":
         request = CryptoBarsRequest(
@@ -40,6 +47,7 @@ def get_bars(symbol: str, asset_class: str, bars: int = config.LOOKBACK_BARS):
             timeframe=BAR_TIMEFRAME,
             start=start,
             limit=bars,
+            sort=Sort.DESC,
         )
         barset = crypto_data_client.get_crypto_bars(request)
     else:
@@ -48,9 +56,10 @@ def get_bars(symbol: str, asset_class: str, bars: int = config.LOOKBACK_BARS):
             timeframe=BAR_TIMEFRAME,
             start=start,
             limit=bars,
+            sort=Sort.DESC,
         )
         barset = stock_data_client.get_stock_bars(request)
-    return barset[symbol]
+    return list(reversed(barset[symbol]))
 
 
 def place_market_order(symbol: str, qty: float, side: str, asset_class: str = "stock"):

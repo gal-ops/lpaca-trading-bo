@@ -78,10 +78,18 @@ def rank_candidates(signals: dict, limit: int) -> list:
     return [sym for sym, _ in buy_candidates[:limit]]
 
 
-def calculate_qty(account, price: float) -> float:
-    """How many shares/coins to buy based on max position size."""
+def calculate_qty(account, price: float, asset_class: str = "stock") -> float:
+    """How many shares/coins to buy based on max position size.
+
+    Crypto isn't marginable on Alpaca, so it can only be bought with actual
+    cash headroom (non_marginable_buying_power), not the regular
+    (margin-inclusive) buying_power used for stocks.
+    """
     equity = float(account.equity)
-    buying_power = float(account.buying_power)
-    max_spend = min(equity * config.MAX_POSITION_PCT, buying_power)
+    if asset_class == "crypto":
+        available = float(account.non_marginable_buying_power)
+    else:
+        available = float(account.buying_power)
+    max_spend = min(equity * config.MAX_POSITION_PCT, available)
     qty = max_spend / price
     return max(round(qty, 6), 0.000001)
