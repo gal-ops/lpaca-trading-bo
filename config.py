@@ -27,8 +27,8 @@ RSI_OVERSOLD = 50    # Buy on any momentum shift
 RSI_OVERBOUGHT = 55  # Sell quickly to lock in gains
 
 # Risk management — aggressive sizing
-MAX_POSITION_PCT = 0.20   # Up to 20% of portfolio per position
-MAX_POSITIONS = 6         # Up to 6 open positions at once
+MAX_POSITION_PCT = 0.08   # Up to 8% of portfolio per position
+MAX_POSITIONS = 12        # Up to 12 open positions at once (was 6)
 STOP_LOSS_PCT = 0.05      # 5% stop loss
 TAKE_PROFIT_PCT = 0.12    # 12% take profit target
 
