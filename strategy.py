@@ -87,7 +87,10 @@ def calculate_qty(account, price: float, asset_class: str = "stock") -> float:
     """
     equity = float(account.equity)
     if asset_class == "crypto":
-        available = float(account.non_marginable_buying_power)
+        # Leave a small buffer: our price is a few minutes old by the time the
+        # order executes, so spending 100% of available cash can overshoot
+        # and get rejected on a live price uptick.
+        available = float(account.non_marginable_buying_power) * 0.97
     else:
         available = float(account.buying_power)
     max_spend = min(equity * config.MAX_POSITION_PCT, available)

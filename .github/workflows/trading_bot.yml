@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write   # needed so the workflow can commit trades.xlsx back to the repo
 
+concurrency:
+  group: alpaca-trading-bot
+  cancel-in-progress: false   # let an overlapping run wait instead of racing the live trade
+
 jobs:
   trade:
     runs-on: ubuntu-latest
