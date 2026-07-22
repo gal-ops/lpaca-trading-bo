@@ -12,8 +12,12 @@ def log(msg: str):
 
 def run_bot():
     market_open = ac.is_market_open()
-    if not market_open:
-        log("Stock market is closed — evaluating crypto only.")
+    extended_hours_open = ac.is_extended_hours_session()
+    if not market_open and extended_hours_open:
+        log("Stock market is in extended hours — stock orders will use LIMIT "
+            "orders, not market orders (Alpaca requirement outside core session).")
+    elif not market_open:
+        log("Stock market is closed (outside core and extended hours) — evaluating crypto only.")
 
     account = ac.get_account()
     positions = ac.get_positions()
@@ -28,10 +32,11 @@ def run_bot():
     last_prices = {}
 
     # Full real Alpaca-tradable universe, fetched live -- not a hardcoded
-    # watchlist. Crypto is always scanned; stocks only while the market is
-    # open (matches the existing off-hours order-placement guard below).
+    # watchlist. Crypto is always scanned; stocks are scanned during core OR
+    # extended hours (order placement below branches on which one applies).
+    stock_session_open = market_open or extended_hours_open
     crypto_symbols = ac.get_tradable_symbols("crypto")
-    stock_symbols = ac.get_tradable_symbols("stock") if market_open else []
+    stock_symbols = ac.get_tradable_symbols("stock") if stock_session_open else []
     log(f"Universe this cycle: {len(stock_symbols)} stocks, {len(crypto_symbols)} crypto pairs.")
 
     for asset_class, symbols in (("stock", stock_symbols), ("crypto", crypto_symbols)):
@@ -66,8 +71,13 @@ def run_bot():
         try:
             pos = positions[symbol]
             entry_price = float(pos.avg_entry_price)
+            asset_class = asset_classes[symbol]
 
-            order = ac.close_position(symbol)
+            if asset_class == "stock" and not market_open and extended_hours_open:
+                order = ac.close_position(symbol, extended_hours=True,
+                                           qty=abs(float(pos.qty)), ref_price=last_prices[symbol])
+            else:
+                order = ac.close_position(symbol)
             filled = ac.wait_for_fill(order.id)
             if filled.filled_avg_price is None:
                 log(f"{symbol}: sell order did not fill (status={filled.status}), not logging.")
@@ -117,11 +127,16 @@ def run_bot():
             try:
                 result = signals[symbol]
                 price = last_prices[symbol]
-                qty = strategy.calculate_qty(account, price, asset_classes[symbol])
+                asset_class = asset_classes[symbol]
+                qty = strategy.calculate_qty(account, price, asset_class)
                 if qty <= 0.000001:
                     log(f"{symbol}: insufficient buying power, skipping.")
                     continue
-                order = ac.place_market_order(symbol, qty, "buy", asset_classes[symbol])
+                if asset_class == "stock" and not market_open and extended_hours_open:
+                    order = ac.place_market_order(symbol, qty, "buy", asset_class,
+                                                    extended_hours=True, ref_price=price)
+                else:
+                    order = ac.place_market_order(symbol, qty, "buy", asset_class)
                 filled = ac.wait_for_fill(order.id)
                 if filled.filled_avg_price is None:
                     log(f"{symbol}: buy order did not fill (status={filled.status}), not logging.")
@@ -144,10 +159,11 @@ def run_bot():
     for symbol, pos in positions.items():
         try:
             asset_class = asset_classes.get(symbol, "crypto" if "/" in symbol or symbol.endswith("USD") else "stock")
-            # Regular stock market orders can't execute outside market hours —
-            # attempting one just produces a canceled order. Crypto is 24/7.
-            if asset_class == "stock" and not market_open:
+            # Stocks can be managed during core OR extended hours now; only
+            # skip entirely outside both. Crypto is always 24/7.
+            if asset_class == "stock" and not market_open and not extended_hours_open:
                 continue
+            use_extended = asset_class == "stock" and not market_open and extended_hours_open
 
             pnl_pct = float(pos.unrealized_plpc)
             sl_pct = strategy.stop_loss_pct(asset_class)
@@ -171,7 +187,11 @@ def run_bot():
 
             if reason:
                 entry_price = float(pos.avg_entry_price)
-                order = ac.close_position(symbol)
+                if use_extended:
+                    order = ac.close_position(symbol, extended_hours=True,
+                                               qty=abs(float(pos.qty)), ref_price=float(pos.current_price))
+                else:
+                    order = ac.close_position(symbol)
                 filled = ac.wait_for_fill(order.id)
                 if filled.filled_avg_price is None:
                     log(f"{symbol}: {reason} but close order did not fill (status={filled.status}), not logging.")

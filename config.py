@@ -32,6 +32,23 @@ BAR_FETCH_CHUNK_DELAY = 0.3
 # compromised (the news score can still re-order who actually gets bought).
 NEWS_CANDIDATE_CAP = 50
 
+# Extended-hours stock trading: ~4am-8pm ET on trading days, well beyond the
+# standard 9:30am-4pm ET core session. Still not literally 24/7 -- no US
+# equity exchange is; crypto is the only asset class here that actually
+# trades around the clock, with no gate at all. Doesn't check market
+# holidays -- an order placed on one is simply rejected by Alpaca, a safe
+# failure, not a silent bad trade.
+#
+# Alpaca REQUIRES limit orders (not market orders) outside the core session,
+# because extended-session liquidity is much thinner -- a market order there
+# could fill far from the intended price. EXTENDED_HOURS_LIMIT_BUFFER_PCT is
+# the slippage buffer added to the reference price to keep a realistic
+# chance of filling without accepting an open-ended bad fill.
+EXTENDED_HOURS_ENABLED = True
+EXTENDED_HOURS_START_ET = (4, 0)
+EXTENDED_HOURS_END_ET = (20, 0)
+EXTENDED_HOURS_LIMIT_BUFFER_PCT = 0.005
+
 # Strategy parameters
 BAR_MINUTES = 15
 EMA_FAST = 9

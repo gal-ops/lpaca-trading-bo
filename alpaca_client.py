@@ -1,11 +1,12 @@
 from alpaca.trading.client import TradingClient
 from alpaca.data.historical import StockHistoricalDataClient, CryptoHistoricalDataClient
-from alpaca.trading.requests import MarketOrderRequest, GetAssetsRequest
+from alpaca.trading.requests import MarketOrderRequest, LimitOrderRequest, GetAssetsRequest
 from alpaca.trading.enums import OrderSide, TimeInForce, AssetClass, AssetStatus
 from alpaca.data.requests import StockBarsRequest, CryptoBarsRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 from alpaca.common.enums import Sort
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import time
 import config
 
@@ -110,21 +111,60 @@ def get_bars_batch(symbols: list, asset_class: str, bars: int = config.LOOKBACK_
     return result
 
 
-def place_market_order(symbol: str, qty: float, side: str, asset_class: str = "stock"):
+def is_extended_hours_session() -> bool:
+    """True during Alpaca's stock extended-hours window (~4am-8pm ET,
+    weekdays) even when the core 9:30am-4pm session is closed. Doesn't
+    check market holidays -- an order placed on one is simply rejected by
+    Alpaca, a safe failure mode rather than a silent bad trade."""
+    if not config.EXTENDED_HOURS_ENABLED:
+        return False
+    now_et = datetime.now(ZoneInfo("America/New_York"))
+    if now_et.weekday() >= 5:  # Sat/Sun
+        return False
+    start_h, start_m = config.EXTENDED_HOURS_START_ET
+    end_h, end_m = config.EXTENDED_HOURS_END_ET
+    start = now_et.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
+    end = now_et.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
+    return start <= now_et < end
+
+
+def place_market_order(symbol: str, qty: float, side: str, asset_class: str = "stock",
+                        extended_hours: bool = False, ref_price: float = None):
+    """extended_hours=True places a LIMIT order instead of a market order --
+    Alpaca requires this outside core stock hours, since thin liquidity
+    there means a market order could fill far from the intended price.
+    ref_price (the last known bar close) is required in that case; the
+    limit is offset by EXTENDED_HOURS_LIMIT_BUFFER_PCT to keep a realistic
+    chance of filling without accepting an open-ended bad price.
+    """
     order_side = OrderSide.BUY if side == "buy" else OrderSide.SELL
-    # Alpaca requires GTC (not DAY) time-in-force for crypto orders.
-    tif = TimeInForce.GTC if asset_class == "crypto" else TimeInForce.DAY
-    req = MarketOrderRequest(
-        symbol=symbol,
-        qty=qty,
-        side=order_side,
-        time_in_force=tif,
-    )
+    if asset_class == "crypto":
+        # Alpaca requires GTC (not DAY) time-in-force for crypto orders.
+        req = MarketOrderRequest(symbol=symbol, qty=qty, side=order_side, time_in_force=TimeInForce.GTC)
+    elif extended_hours:
+        if ref_price is None:
+            raise ValueError("extended_hours order requires ref_price")
+        buffer = config.EXTENDED_HOURS_LIMIT_BUFFER_PCT
+        limit_price = ref_price * (1 + buffer) if side == "buy" else ref_price * (1 - buffer)
+        req = LimitOrderRequest(
+            symbol=symbol, qty=qty, side=order_side, time_in_force=TimeInForce.DAY,
+            limit_price=round(limit_price, 2), extended_hours=True,
+        )
+    else:
+        req = MarketOrderRequest(symbol=symbol, qty=qty, side=order_side, time_in_force=TimeInForce.DAY)
     return trading_client.submit_order(req)
 
 
-def close_position(symbol: str):
-    return trading_client.close_position(symbol)
+def close_position(symbol: str, extended_hours: bool = False, qty: float = None, ref_price: float = None):
+    """extended_hours=True can't use Alpaca's close_position convenience
+    endpoint (it places a market order under the hood) -- submits an
+    explicit limit sell for the full position size instead. qty and
+    ref_price are required in that case."""
+    if not extended_hours:
+        return trading_client.close_position(symbol)
+    if qty is None or ref_price is None:
+        raise ValueError("extended_hours close requires qty and ref_price")
+    return place_market_order(symbol, qty, "sell", "stock", extended_hours=True, ref_price=ref_price)
 
 
 def get_order(order_id):
