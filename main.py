@@ -94,7 +94,7 @@ def run_bot():
             result["reason"] += f'; news: "{news["headline"]}" (sentiment={news["score"]:+d})'
             log(f"{symbol}: news sentiment={news['score']:+d} | \"{news['headline']}\"")
 
-        buy_signals = {s: r for s, r in buy_signals.items() if r["news_score"] > -2}
+        buy_signals = {s: r for s, r in buy_signals.items() if r["news_score"] > config.NEWS_VETO_SCORE}
 
         ranked = strategy.rank_candidates(buy_signals, available_slots)
         for symbol in ranked:
@@ -122,7 +122,8 @@ def run_bot():
             except Exception as e:
                 log(f"{symbol}: buy error — {e}")
 
-    # --- Stop-loss / take-profit sweep over whatever remains open ---
+    # --- Stop-loss / take-profit sweep, plus a news-driven protective exit,
+    # over whatever remains open ---
     positions = ac.get_positions()
     for symbol, pos in positions.items():
         try:
@@ -133,11 +134,24 @@ def run_bot():
                 continue
 
             pnl_pct = float(pos.unrealized_plpc)
+            sl_pct = strategy.stop_loss_pct(asset_class)
+            tp_pct = strategy.take_profit_pct(asset_class)
             reason = None
-            if pnl_pct <= -config.STOP_LOSS_PCT:
+            if pnl_pct <= -sl_pct:
                 reason = f"stop-loss hit at {pnl_pct*100:.2f}%"
-            elif pnl_pct >= config.TAKE_PROFIT_PCT:
+            elif pnl_pct >= tp_pct:
                 reason = f"take-profit hit at {pnl_pct*100:.2f}%"
+
+            # News research on every held position, not just buy candidates:
+            # strongly negative news is an independent protective exit, using
+            # the same veto threshold applied on entry. Good news never
+            # overrides a stop-loss/take-profit already decided above —
+            # safety first, same principle as the buy/sell conflict rule.
+            if reason is None:
+                news = news_client.get_news_sentiment(symbol)
+                log(f"{symbol}: held-position news sentiment={news['score']:+d} | \"{news['headline']}\"")
+                if news["score"] <= config.NEWS_VETO_SCORE:
+                    reason = f'news turned bearish: "{news["headline"]}" (sentiment={news["score"]:+d})'
 
             if reason:
                 entry_price = float(pos.avg_entry_price)
