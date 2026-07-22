@@ -10,15 +10,6 @@ def log(msg: str):
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
 
 
-def _universe(market_open: bool):
-    """Yields (symbol, asset_class) pairs to evaluate this cycle."""
-    if market_open:
-        for symbol in config.STOCK_WATCHLIST:
-            yield symbol, "stock"
-    for symbol in config.CRYPTO_WATCHLIST:
-        yield symbol, "crypto"
-
-
 def run_bot():
     market_open = ac.is_market_open()
     if not market_open:
@@ -36,19 +27,37 @@ def run_bot():
     asset_classes = {}
     last_prices = {}
 
-    for symbol, asset_class in _universe(market_open):
-        try:
-            bars = ac.get_bars(symbol, asset_class)
+    # Full real Alpaca-tradable universe, fetched live -- not a hardcoded
+    # watchlist. Crypto is always scanned; stocks only while the market is
+    # open (matches the existing off-hours order-placement guard below).
+    crypto_symbols = ac.get_tradable_symbols("crypto")
+    stock_symbols = ac.get_tradable_symbols("stock") if market_open else []
+    log(f"Universe this cycle: {len(stock_symbols)} stocks, {len(crypto_symbols)} crypto pairs.")
+
+    for asset_class, symbols in (("stock", stock_symbols), ("crypto", crypto_symbols)):
+        if not symbols:
+            continue
+        bars_by_symbol = ac.get_bars_batch(symbols, asset_class)
+        buys = sells = 0
+        for symbol in symbols:
+            bars = bars_by_symbol.get(symbol)
             if not bars:
-                log(f"{symbol}: no bar data, skipping.")
                 continue
-            result = strategy.compute_signals(bars)
-            signals[symbol] = result
+            try:
+                result = strategy.compute_signals(bars)
+            except Exception as e:
+                log(f"{symbol}: error evaluating — {e}")
+                continue
             asset_classes[symbol] = asset_class
             last_prices[symbol] = bars[-1].close
+            if result["signal"] == "hold":
+                continue  # don't flood the log with thousands of holds
+            signals[symbol] = result
+            buys += result["signal"] == "buy"
+            sells += result["signal"] == "sell"
             log(f"{symbol} ({asset_class}): signal={result['signal']} | {result['reason']}")
-        except Exception as e:
-            log(f"{symbol}: error fetching/evaluating — {e}")
+        log(f"{asset_class}: {len(bars_by_symbol)} symbols had bar data, "
+            f"{buys} buy signal(s), {sells} sell signal(s).")
 
     # --- SELL first, to free up capital/slots before considering buys ---
     for symbol, result in list(signals.items()):
@@ -83,20 +92,27 @@ def run_bot():
     if available_slots > 0:
         buy_signals = {s: r for s, r in signals.items()
                         if s not in positions and r["signal"] == "buy"}
+        log(f"{len(buy_signals)} raw buy candidate(s) across the scanned universe.")
 
-        # Free news research: fold headline sentiment into each candidate's
-        # score, and veto candidates with clearly bad news even if the
-        # technical signal says buy.
-        for symbol, result in buy_signals.items():
+        # Pre-rank by technical score and cap before spending a news-API
+        # call per candidate -- bounds news volume even on a market-wide
+        # rally with hundreds of simultaneous signals, while staying far
+        # larger than MAX_POSITIONS so selection quality isn't compromised.
+        top_candidates = dict(
+            sorted(buy_signals.items(), key=lambda kv: kv[1]["score"], reverse=True)
+            [:config.NEWS_CANDIDATE_CAP]
+        )
+
+        for symbol, result in top_candidates.items():
             news = news_client.get_news_sentiment(symbol)
             result["news_score"] = news["score"]
             result["score"] += news["score"] * 2
             result["reason"] += f'; news: "{news["headline"]}" (sentiment={news["score"]:+d})'
             log(f"{symbol}: news sentiment={news['score']:+d} | \"{news['headline']}\"")
 
-        buy_signals = {s: r for s, r in buy_signals.items() if r["news_score"] > config.NEWS_VETO_SCORE}
+        top_candidates = {s: r for s, r in top_candidates.items() if r["news_score"] > config.NEWS_VETO_SCORE}
 
-        ranked = strategy.rank_candidates(buy_signals, available_slots)
+        ranked = strategy.rank_candidates(top_candidates, available_slots)
         for symbol in ranked:
             try:
                 result = signals[symbol]
@@ -194,8 +210,7 @@ if __name__ == "__main__":
     import schedule
 
     test_connection()
-    log(f"Bot starting. Stocks: {', '.join(config.STOCK_WATCHLIST)}")
-    log(f"Crypto (24/7): {', '.join(config.CRYPTO_WATCHLIST)}")
+    log("Bot starting. Universe: full Alpaca-tradable stock + crypto universe, fetched live each cycle.")
     log("Running strategy every 5 minutes...")
 
     run_bot()  # run immediately on start

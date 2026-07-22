@@ -1,7 +1,7 @@
 from alpaca.trading.client import TradingClient
 from alpaca.data.historical import StockHistoricalDataClient, CryptoHistoricalDataClient
-from alpaca.trading.requests import MarketOrderRequest
-from alpaca.trading.enums import OrderSide, TimeInForce
+from alpaca.trading.requests import MarketOrderRequest, GetAssetsRequest
+from alpaca.trading.enums import OrderSide, TimeInForce, AssetClass, AssetStatus
 from alpaca.data.requests import StockBarsRequest, CryptoBarsRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 from alpaca.common.enums import Sort
@@ -31,35 +31,70 @@ def get_open_orders():
 BAR_TIMEFRAME = TimeFrame(config.BAR_MINUTES, TimeFrameUnit.Minute)
 
 
-def get_bars(symbol: str, asset_class: str, bars: int = config.LOOKBACK_BARS):
-    """asset_class is 'stock' or 'crypto'.
+def get_tradable_symbols(asset_class: str) -> list:
+    """The bot's real addressable universe, fetched live from Alpaca --
+    not a hardcoded watchlist. Stocks are filtered to major listed
+    exchanges (excludes OTC/pink-sheet names, which are thin enough that
+    15-min bars are mostly noise, not signal). Crypto gets no exchange
+    filter: Alpaca's full tradable crypto list is used as-is.
+    """
+    if asset_class == "crypto":
+        req = GetAssetsRequest(asset_class=AssetClass.CRYPTO, status=AssetStatus.ACTIVE)
+        assets = trading_client.get_all_assets(req)
+        return sorted(a.symbol for a in assets if a.tradable)
+    req = GetAssetsRequest(asset_class=AssetClass.US_EQUITY, status=AssetStatus.ACTIVE)
+    assets = trading_client.get_all_assets(req)
+    out = []
+    for a in assets:
+        if not a.tradable:
+            continue
+        exch = getattr(a.exchange, "value", str(a.exchange))
+        if exch in config.STOCK_EXCHANGE_ALLOWLIST:
+            out.append(a.symbol)
+    return sorted(out)
 
-    Alpaca's bars API defaults to ascending (oldest-first) order, so combining
-    a wide `start` window with `limit` silently returns the *oldest* bars in
-    that window instead of the most recent ones. We fetch DESC (newest-first)
-    to guarantee freshness, then reverse to chronological order for the
-    indicator math in strategy.py, which expects bars[-1] to be the latest.
+
+def get_bars_batch(symbols: list, asset_class: str, bars: int = config.LOOKBACK_BARS) -> dict:
+    """Fetch bars for many symbols via chunked multi-symbol requests instead
+    of one API call per symbol -- the only way this stays fast at
+    full-universe scale (thousands of stocks). Returns {symbol: [bars...]}
+    in the same chronological (oldest-first) order get_bars used to return.
     """
     start = datetime.now() - timedelta(minutes=config.BAR_MINUTES * bars * 6)
-    if asset_class == "crypto":
-        request = CryptoBarsRequest(
-            symbol_or_symbols=symbol,
-            timeframe=BAR_TIMEFRAME,
-            start=start,
-            limit=bars,
-            sort=Sort.DESC,
-        )
-        barset = crypto_data_client.get_crypto_bars(request)
-    else:
-        request = StockBarsRequest(
-            symbol_or_symbols=symbol,
-            timeframe=BAR_TIMEFRAME,
-            start=start,
-            limit=bars,
-            sort=Sort.DESC,
-        )
-        barset = stock_data_client.get_stock_bars(request)
-    return list(reversed(barset[symbol]))
+    result = {}
+    chunk_size = config.BAR_FETCH_CHUNK_SIZE
+    for i in range(0, len(symbols), chunk_size):
+        chunk = symbols[i:i + chunk_size]
+        try:
+            if asset_class == "crypto":
+                request = CryptoBarsRequest(
+                    symbol_or_symbols=chunk,
+                    timeframe=BAR_TIMEFRAME,
+                    start=start,
+                    limit=bars,
+                    sort=Sort.DESC,
+                )
+                barset = crypto_data_client.get_crypto_bars(request)
+            else:
+                request = StockBarsRequest(
+                    symbol_or_symbols=chunk,
+                    timeframe=BAR_TIMEFRAME,
+                    start=start,
+                    limit=bars,
+                    sort=Sort.DESC,
+                )
+                barset = stock_data_client.get_stock_bars(request)
+        except Exception:
+            continue  # one bad chunk shouldn't sink the whole cycle
+        for sym in chunk:
+            try:
+                sym_bars = barset[sym]
+            except KeyError:
+                continue
+            if sym_bars:
+                result[sym] = list(reversed(sym_bars))
+        time.sleep(config.BAR_FETCH_CHUNK_DELAY)
+    return result
 
 
 def place_market_order(symbol: str, qty: float, side: str, asset_class: str = "stock"):
