@@ -42,3 +42,15 @@ jobs:
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           ALPACA_BASE_URL: https://paper-api.alpaca.markets
         run: python run_once.py
+
+      - name: Commit updated trade log
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "trading-bot@users.noreply.github.com"
+          if [ -f trades.xlsx ]; then
+            git add trades.xlsx
+            git diff --cached --quiet && echo "No new trades this cycle." || \
+              (git commit -m "Update trade log [skip ci]" && git pull --rebase && git push)
+          else
+            echo "No trades yet — trades.xlsx not created."
+          fi
