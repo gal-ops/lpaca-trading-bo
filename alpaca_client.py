@@ -58,9 +58,22 @@ def get_bars_batch(symbols: list, asset_class: str, bars: int = config.LOOKBACK_
     """Fetch bars for many symbols via chunked multi-symbol requests instead
     of one API call per symbol -- the only way this stays fast at
     full-universe scale (thousands of stocks). Returns {symbol: [bars...]}
-    in the same chronological (oldest-first) order get_bars used to return.
+    in chronological (oldest-first) order, matching what strategy.py's
+    indicator math expects (bars[-1] is the latest).
+
+    Deliberately omits `limit`: for a MULTI-symbol request, Alpaca applies
+    `limit` to the total record count across the whole combined response,
+    not per symbol (unlike a single-symbol request, where it's per-symbol).
+    Confirmed live: requesting 73 crypto symbols with limit=80 returned bar
+    data for exactly 1 symbol -- one symbol's ~80 bars consumed the entire
+    global budget before the rest were ever included. Bounding by `start`
+    and trimming to the most recent `bars` per symbol client-side avoids
+    that trap entirely.
     """
-    start = datetime.now() - timedelta(minutes=config.BAR_MINUTES * bars * 6)
+    # Crypto trades 24/7 with no session gaps, so a short buffer covers it;
+    # stocks need enough slack to span a weekend/holiday close.
+    buffer_multiplier = 1.5 if asset_class == "crypto" else 6
+    start = datetime.now() - timedelta(minutes=config.BAR_MINUTES * bars * buffer_multiplier)
     result = {}
     chunk_size = config.BAR_FETCH_CHUNK_SIZE
     for i in range(0, len(symbols), chunk_size):
@@ -71,8 +84,7 @@ def get_bars_batch(symbols: list, asset_class: str, bars: int = config.LOOKBACK_
                     symbol_or_symbols=chunk,
                     timeframe=BAR_TIMEFRAME,
                     start=start,
-                    limit=bars,
-                    sort=Sort.DESC,
+                    sort=Sort.ASC,
                 )
                 barset = crypto_data_client.get_crypto_bars(request)
             else:
@@ -80,19 +92,20 @@ def get_bars_batch(symbols: list, asset_class: str, bars: int = config.LOOKBACK_
                     symbol_or_symbols=chunk,
                     timeframe=BAR_TIMEFRAME,
                     start=start,
-                    limit=bars,
-                    sort=Sort.DESC,
+                    sort=Sort.ASC,
                 )
                 barset = stock_data_client.get_stock_bars(request)
         except Exception:
             continue  # one bad chunk shouldn't sink the whole cycle
         for sym in chunk:
             try:
-                sym_bars = barset[sym]
+                sym_bars = list(barset[sym])
             except KeyError:
                 continue
             if sym_bars:
-                result[sym] = list(reversed(sym_bars))
+                # ASC order already matches the chronological order the
+                # indicator math expects; trim to the most recent `bars`.
+                result[sym] = sym_bars[-bars:]
         time.sleep(config.BAR_FETCH_CHUNK_DELAY)
     return result
 
