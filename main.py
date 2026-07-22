@@ -60,8 +60,11 @@ def run_bot():
 
             order = ac.close_position(symbol)
             filled = ac.wait_for_fill(order.id)
-            exit_price = float(filled.filled_avg_price) if filled.filled_avg_price else last_prices[symbol]
-            qty = float(filled.filled_qty) if filled.filled_qty else float(pos.qty)
+            if filled.filled_avg_price is None:
+                log(f"{symbol}: sell order did not fill (status={filled.status}), not logging.")
+                continue
+            exit_price = float(filled.filled_avg_price)
+            qty = float(filled.filled_qty)
 
             pnl_usd = (exit_price - entry_price) * qty
             pnl_pct = (exit_price - entry_price) / entry_price * 100 if entry_price else 0
@@ -104,8 +107,11 @@ def run_bot():
                     continue
                 order = ac.place_market_order(symbol, qty, "buy", asset_classes[symbol])
                 filled = ac.wait_for_fill(order.id)
-                fill_price = float(filled.filled_avg_price) if filled.filled_avg_price else price
-                fill_qty = float(filled.filled_qty) if filled.filled_qty else qty
+                if filled.filled_avg_price is None:
+                    log(f"{symbol}: buy order did not fill (status={filled.status}), not logging.")
+                    continue
+                fill_price = float(filled.filled_avg_price)
+                fill_qty = float(filled.filled_qty)
                 log(f"BUY {fill_qty} {symbol} @ ${fill_price:.4f} | order_id={order.id}")
                 excel_client.log_trade(
                     symbol, asset_classes[symbol], "buy", fill_qty, fill_price,
@@ -120,8 +126,13 @@ def run_bot():
     positions = ac.get_positions()
     for symbol, pos in positions.items():
         try:
+            asset_class = asset_classes.get(symbol, "crypto" if "/" in symbol or symbol.endswith("USD") else "stock")
+            # Regular stock market orders can't execute outside market hours —
+            # attempting one just produces a canceled order. Crypto is 24/7.
+            if asset_class == "stock" and not market_open:
+                continue
+
             pnl_pct = float(pos.unrealized_plpc)
-            asset_class = asset_classes.get(symbol, "stock" if "/" not in symbol else "crypto")
             reason = None
             if pnl_pct <= -config.STOP_LOSS_PCT:
                 reason = f"stop-loss hit at {pnl_pct*100:.2f}%"
@@ -132,8 +143,11 @@ def run_bot():
                 entry_price = float(pos.avg_entry_price)
                 order = ac.close_position(symbol)
                 filled = ac.wait_for_fill(order.id)
-                exit_price = float(filled.filled_avg_price) if filled.filled_avg_price else float(pos.current_price)
-                qty = float(filled.filled_qty) if filled.filled_qty else float(pos.qty)
+                if filled.filled_avg_price is None:
+                    log(f"{symbol}: {reason} but close order did not fill (status={filled.status}), not logging.")
+                    continue
+                exit_price = float(filled.filled_avg_price)
+                qty = float(filled.filled_qty)
 
                 pnl_usd = (exit_price - entry_price) * qty
                 actual_pnl_pct = (exit_price - entry_price) / entry_price * 100 if entry_price else 0
