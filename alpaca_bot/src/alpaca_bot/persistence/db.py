@@ -270,6 +270,31 @@ class Database:
             (_now_iso(), feed, reason),
         )
 
+    def record_signal_outcome(self, signal_id: str, won: bool) -> None:
+        self.execute(
+            "UPDATE signals SET outcome_label = ? WHERE signal_id = ?",
+            (int(won), signal_id),
+        )
+
+    def bucket_outcomes_near_probability(
+        self, bucket_key: str, target_probability: float, tolerance: float, limit: int = 500,
+    ) -> list[sqlite3.Row]:
+        """Accepted signals in this bucket whose predicted probability was
+        within `tolerance` of `target_probability` and whose outcome is
+        now known -- the raw material for checking whether "predicted 85%"
+        actually wins near 85% of the time."""
+        strategy, direction, asset_class, regime = bucket_key.split("|")
+        return self.query(
+            """
+            SELECT calibrated_probability, outcome_label FROM signals
+            WHERE strategy = ? AND direction = ? AND asset_class = ? AND regime = ?
+              AND accepted = 1 AND outcome_label IS NOT NULL
+              AND ABS(calibrated_probability - ?) <= ?
+            ORDER BY ts DESC LIMIT ?
+            """,
+            (strategy, direction, asset_class, regime, target_probability, tolerance, limit),
+        )
+
     # ---- calibration buckets ----
 
     def get_calibration_bucket(self, bucket_key: str) -> sqlite3.Row | None:

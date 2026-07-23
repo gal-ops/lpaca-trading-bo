@@ -71,7 +71,11 @@ CREATE TABLE IF NOT EXISTS signals (
     expected_value_after_costs REAL,
     accepted INTEGER NOT NULL,      -- 1 = accepted (order attempted), 0 = rejected
     rejection_reasons_json TEXT,
-    model_version TEXT
+    model_version TEXT,
+    outcome_label INTEGER           -- NULL until the resulting trade closes;
+                                    -- 1 = net-profitable after costs, 0 = not.
+                                    -- Filled in by execution (phase 10) once
+                                    -- known -- used by the calibration monitor.
 );
 CREATE INDEX IF NOT EXISTS idx_signals_symbol_ts ON signals(symbol, ts);
 CREATE INDEX IF NOT EXISTS idx_signals_accepted ON signals(accepted);
