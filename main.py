@@ -403,6 +403,17 @@ def run_bot():
         except Exception as e:
             log(f"{symbol} position check error: {e}")
 
+    # ---- Full account snapshot, every cycle regardless of whether a trade
+    # happened -- the Excel workbook's EquityLog/Positions tabs are the
+    # continuous record; Trades only captures fills. ----
+    try:
+        final_account = ac.get_account()
+        final_positions = ac.get_positions()
+        excel_client.log_snapshot(final_account, final_positions, asset_classes,
+                                  extra={"high_water_mark": st["high_water_mark"]})
+    except Exception as e:
+        log(f"snapshot logging error: {e}")
+
 
 def _enforce_paper_live_gate():
     """Refuse to run in a mismatched/unsafe paper-vs-live configuration.
