@@ -45,7 +45,7 @@ def _style_header(ws, row=1, ncols=None):
         cell.font = HEADER_FONT
         cell.fill = HEADER_FILL
         cell.alignment = Alignment(horizontal="center")
-    ws.freeze_panes = ws.cell(row=row + 1, column=1)
+    ws.freeze_panes = f"A{row + 1}"
 
 
 def _autosize(ws, widths):
