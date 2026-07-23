@@ -10,7 +10,7 @@ on:
   workflow_dispatch:         # also lets you trigger it manually in GitHub UI
 
 permissions:
-  contents: write   # needed so the workflow can commit trades.xlsx back to the repo
+  contents: write   # needed so the workflow can commit trades.xlsx + bot_state.json back to the repo
 
 concurrency:
   group: alpaca-trading-bot
@@ -41,16 +41,21 @@ jobs:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           ALPACA_BASE_URL: https://paper-api.alpaca.markets
+          # Optional email alerts -- set these repo secrets to enable (bot runs fine without them):
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+          ALERT_SMTP_USER: ${{ secrets.ALERT_SMTP_USER }}
+          ALERT_SMTP_PASSWORD: ${{ secrets.ALERT_SMTP_PASSWORD }}
         run: python run_once.py
 
-      - name: Commit updated trade log
+      - name: Commit updated trade log and bot state
         run: |
           git config user.name "trading-bot"
           git config user.email "trading-bot@users.noreply.github.com"
-          if [ -f trades.xlsx ]; then
-            git add trades.xlsx
-            git diff --cached --quiet && echo "No new trades this cycle." || \
-              (git commit -m "Update trade log [skip ci]" && git pull --rebase && git push)
+          git add trades.xlsx bot_state.json 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "No changes to commit this cycle."
           else
-            echo "No trades yet — trades.xlsx not created."
+            git commit -m "Update trade log + bot state [skip ci]"
+            git pull --rebase
+            git push
           fi

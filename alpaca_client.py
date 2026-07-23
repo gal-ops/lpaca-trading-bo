@@ -11,7 +11,10 @@ import time
 import config
 
 
-trading_client = TradingClient(config.API_KEY, config.SECRET_KEY, paper=True)
+# paper=True unless LIVE_TRADING is explicitly flipped on in config. This is
+# the enforcement point for the paper/live gate: even a live ALPACA_BASE_URL
+# in .env cannot move real money while config.LIVE_TRADING is False.
+trading_client = TradingClient(config.API_KEY, config.SECRET_KEY, paper=not config.LIVE_TRADING)
 stock_data_client = StockHistoricalDataClient(config.API_KEY, config.SECRET_KEY)
 crypto_data_client = CryptoHistoricalDataClient()  # crypto market data is public, no keys needed
 
@@ -32,27 +35,35 @@ def get_open_orders():
 BAR_TIMEFRAME = TimeFrame(config.BAR_MINUTES, TimeFrameUnit.Minute)
 
 
-def get_tradable_symbols(asset_class: str) -> list:
+def get_tradable_symbols(asset_class: str) -> dict:
     """The bot's real addressable universe, fetched live from Alpaca --
     not a hardcoded watchlist. Stocks are filtered to major listed
     exchanges (excludes OTC/pink-sheet names, which are thin enough that
     15-min bars are mostly noise, not signal). Crypto gets no exchange
     filter: Alpaca's full tradable crypto list is used as-is.
+
+    Returns {symbol: fractionable_bool} instead of a plain list -- some
+    equities don't support fractional shares, and our position sizing (%
+    of equity / price) routinely produces a fractional quantity. Without
+    this, those orders were only discovered to be invalid after Alpaca
+    rejected them (confirmed live: IRE, CALC, CRMX, RIOX all failed with
+    "asset is not fractionable"). Iterating a dict still works everywhere
+    a plain symbol list did (`for symbol in symbols`, `len(symbols)`).
     """
     if asset_class == "crypto":
         req = GetAssetsRequest(asset_class=AssetClass.CRYPTO, status=AssetStatus.ACTIVE)
         assets = trading_client.get_all_assets(req)
-        return sorted(a.symbol for a in assets if a.tradable)
+        return {a.symbol: bool(a.fractionable) for a in sorted(assets, key=lambda a: a.symbol) if a.tradable}
     req = GetAssetsRequest(asset_class=AssetClass.US_EQUITY, status=AssetStatus.ACTIVE)
     assets = trading_client.get_all_assets(req)
-    out = []
-    for a in assets:
+    out = {}
+    for a in sorted(assets, key=lambda a: a.symbol):
         if not a.tradable:
             continue
         exch = getattr(a.exchange, "value", str(a.exchange))
         if exch in config.STOCK_EXCHANGE_ALLOWLIST:
-            out.append(a.symbol)
-    return sorted(out)
+            out[a.symbol] = bool(a.fractionable)
+    return out
 
 
 def get_bars_batch(symbols: list, asset_class: str, bars: int = config.LOOKBACK_BARS) -> dict:
