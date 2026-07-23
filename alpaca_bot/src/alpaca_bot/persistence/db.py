@@ -258,6 +258,12 @@ class Database:
         row = self.query_one("SELECT value_json FROM risk_state WHERE key = ?", (key,))
         return json.loads(row["value_json"]) if row else default
 
+    def record_risk_event(self, event_type: str, should_flatten: bool, reasons: list[str]) -> None:
+        self.execute(
+            "INSERT INTO risk_events (ts, event_type, should_flatten, reasons_json) VALUES (?, ?, ?, ?)",
+            (_now_iso(), event_type, int(should_flatten), json.dumps(reasons, default=_json_default)),
+        )
+
     def record_error(self, component: str, message: str, traceback_str: str = "") -> None:
         self.execute(
             "INSERT INTO errors (ts, component, message, traceback) VALUES (?, ?, ?, ?)",

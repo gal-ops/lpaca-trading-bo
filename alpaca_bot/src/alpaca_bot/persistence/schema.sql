@@ -154,6 +154,15 @@ CREATE TABLE IF NOT EXISTS risk_state (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS risk_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    event_type TEXT NOT NULL,        -- e.g. 'daily_stop', 'kill_switch', 'drawdown_stop'
+    should_flatten INTEGER NOT NULL,
+    reasons_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_risk_events_ts ON risk_events(ts);
+
 CREATE TABLE IF NOT EXISTS errors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT NOT NULL,
