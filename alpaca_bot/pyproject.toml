@@ -1,0 +1,45 @@
+[project]
+name = "alpaca-bot"
+version = "0.1.0"
+description = "Institutional-grade multi-asset paper-trading system for Alpaca (paper only)."
+requires-python = ">=3.11"
+dependencies = [
+    "alpaca-py>=0.38.0",
+    "pandas>=2.0.0",
+    "numpy>=1.26.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+    "scikit-learn>=1.4.0",
+    "openpyxl>=3.1.0",
+    "websockets>=12.0",
+    "pydantic>=2.6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.4.0",
+    "mypy>=1.9.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/replay"]
+markers = [
+    "integration: requires real Alpaca paper credentials, never run by default",
+]
+addopts = "-m 'not integration'"
+
+[tool.ruff]
+line-length = 100
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

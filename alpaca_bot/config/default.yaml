@@ -1,0 +1,51 @@
+# Strategy/risk defaults. paper.yaml overrides specific keys for the
+# paper-trading profile; nothing here can flip the system into live trading
+# -- that gate lives only in broker/client.py and is not configurable.
+
+risk:
+  risk_per_trade_pct: 0.0025          # 0.25% of current equity
+  max_equity_position_pct: 0.20       # 20% of equity
+  max_crypto_position_pct: 0.15       # 15% of equity
+  max_individual_short_pct: 0.15      # 15% of equity
+  max_gross_exposure_pct: 1.00        # 100% of equity, never leveraged long
+  max_simultaneous_positions: 3
+  max_correlated_cluster_pct: 0.30    # 30% of equity
+  daily_stop_pct: 0.0075              # 0.75% realized+unrealized
+  weekly_stop_pct: 0.02                # 2.00%
+  max_consecutive_losses: 2           # per UTC/equity trading day
+
+session:
+  equity_no_new_trades_before: "09:45"   # ET
+  equity_no_new_entries_after: "15:30"   # ET
+  equity_flatten_intraday_by: "15:55"    # ET
+  crypto_max_holding_hours: 6
+  crypto_daily_reset_utc: "00:00"
+
+confidence_gate:
+  calibrated_probability_min: 0.85
+  bootstrap_lower_bound_min: 0.85
+  reward_risk_min: 1.5
+  min_out_of_sample_examples: 200
+
+universe:
+  equity:
+    min_price: 5.0
+    min_median_dollar_volume: 25_000_000
+    preferred_min_median_dollar_volume: 100_000_000
+    min_avg_volume_shares: 1_000_000
+    max_spread_pct: 0.0010
+    min_atr_pct: 0.01
+    max_atr_pct: 0.08
+  crypto:
+    quote_currency_preference: ["USD", "USDC", "USDT"]
+
+data_quality:
+  max_equity_quote_age_seconds: 2
+  max_crypto_quote_age_seconds: 5
+
+ranking_weights:
+  relative_volume_percentile: 0.30
+  relative_strength_percentile: 0.25
+  catalyst_quality: 0.20
+  liquidity_notional: 0.15
+  spread_execution_quality: 0.10

@@ -1,0 +1,21 @@
+# Paper-trading profile overrides. Values here should approximate the
+# balance intended for eventual live use (per spec section 1, rule 11) --
+# reset the Alpaca paper account balance to match before relying on any of
+# the dollar-denominated thresholds below.
+#
+# This file does NOT and cannot flip PAPER_TRADING/live status -- that
+# enforcement is independent of config and lives only in broker/client.py.
+
+account:
+  target_equity_usd: 540.0
+
+risk:
+  # Same percentage-based limits as default.yaml; equity is intentionally
+  # small on paper so dollar caps derived from these percentages stay
+  # realistic versus a live account, rather than Alpaca's $100k default.
+  risk_per_trade_pct: 0.0025
+  max_equity_position_pct: 0.20
+  max_crypto_position_pct: 0.15
+  max_individual_short_pct: 0.15
+  max_gross_exposure_pct: 1.00
+  max_simultaneous_positions: 3
