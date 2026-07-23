@@ -150,10 +150,11 @@ STATE_FILE = os.getenv("BOT_STATE_FILE", "bot_state.json")
 # ---- Email alerts (10B) ----
 # Sent on every fill and every circuit-breaker/drawdown trigger. All values
 # come from env/secrets; if ALERT_EMAIL_TO or the SMTP creds are unset,
-# alert_client no-ops silently so the bot still runs. Use an app-password
-# (e.g. a Gmail app password) as ALERT_SMTP_PASSWORD, never your real password.
+# alert_client no-ops silently so the bot still runs. Use an app-specific
+# password (iCloud: appleid.apple.com) as ALERT_SMTP_PASSWORD, never your
+# real account password.
 ALERT_EMAIL_TO = os.getenv("ALERT_EMAIL_TO", "")
-ALERT_SMTP_HOST = os.getenv("ALERT_SMTP_HOST", "smtp.gmail.com")
+ALERT_SMTP_HOST = os.getenv("ALERT_SMTP_HOST", "smtp.mail.me.com")
 ALERT_SMTP_PORT = int(os.getenv("ALERT_SMTP_PORT", "587"))
 ALERT_SMTP_USER = os.getenv("ALERT_SMTP_USER", "")
 ALERT_SMTP_PASSWORD = os.getenv("ALERT_SMTP_PASSWORD", "")
