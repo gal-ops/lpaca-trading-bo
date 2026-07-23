@@ -142,7 +142,7 @@ class Database:
         }
         self._conn.execute(
             """
-            INSERT INTO signals (signal_id, ts, strategy, symbol, asset_class, direction, regime,
+            INSERT OR IGNORE INTO signals (signal_id, ts, strategy, symbol, asset_class, direction, regime,
                                   entry, stop, target, max_holding_seconds, feature_snapshot_json,
                                   raw_model_scores_json, calibrated_probability,
                                   expected_value_after_costs, accepted, rejection_reasons_json,
