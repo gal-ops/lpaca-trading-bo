@@ -41,7 +41,13 @@ class Database:
         self._path = path
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA journal_mode=WAL")
+        # Default (DELETE) journal mode, not WAL: each invocation of this
+        # bot is a short-lived single process (a cron/CI run), not a
+        # long-running server with concurrent readers, so WAL's benefit
+        # doesn't apply here -- and DELETE mode leaves no -wal/-shm
+        # sidecar files to manage, so the single .db file is sufficient
+        # to persist state across runs (e.g. committed back to git the
+        # same way trades.xlsx/bot_state.json already are).
         self._conn.execute("PRAGMA foreign_keys=ON")
         self.migrate()
 

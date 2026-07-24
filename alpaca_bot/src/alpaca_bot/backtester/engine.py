@@ -44,6 +44,9 @@ class BacktestTrade:
     qty: float
     pnl: float
     pnl_pct: float
+    asset_class: str = "stock"
+    regime: str = "MIXED_OR_UNCERTAIN"
+    feature_snapshot: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -56,6 +59,9 @@ class _OpenPosition:
     stop: float
     target: float
     qty: float
+    asset_class: str = "stock"
+    regime: str = "MIXED_OR_UNCERTAIN"
+    feature_snapshot: dict = field(default_factory=dict)
     bars_held: int = 0
     max_holding_bars: int = 20
 
@@ -168,9 +174,10 @@ class Backtester:
                         minutes_since_session_open=30,
                         cross_sectional_percentile=self._cross_sectional_percentile(symbol_bars, ts, idx),
                     )
-                    plan = self._best_plan(context)
-                    if plan is None:
+                    best = self._best_plan(context)
+                    if best is None:
                         continue
+                    candidate, plan = best
                     qty = self._plan_qty(plan, equity_now)
                     if qty <= 0:
                         continue
@@ -180,7 +187,9 @@ class Backtester:
                     open_positions[symbol] = _OpenPosition(
                         symbol=symbol, strategy=plan.strategy, direction=plan.direction,
                         entry_ts=ts, entry_price=entry_price, stop=plan.stop, target=plan.target,
-                        qty=qty, max_holding_bars=self.max_holding_bars,
+                        qty=qty, asset_class=plan.asset_class, regime=candidate.regime,
+                        feature_snapshot=dict(candidate.feature_snapshot),
+                        max_holding_bars=self.max_holding_bars,
                     )
                     cash -= qty * entry_price
                     deployed += qty * entry_price
@@ -245,8 +254,8 @@ class Backtester:
         rank = sorted_syms.index(target_sym)
         return 100 * rank / (len(sorted_syms) - 1) if len(sorted_syms) > 1 else 50.0
 
-    def _best_plan(self, context: StrategyContext) -> TradePlan | None:
-        best: TradePlan | None = None
+    def _best_plan(self, context: StrategyContext) -> tuple[CandidateSignal, TradePlan] | None:
+        best: tuple[CandidateSignal, TradePlan] | None = None
         for strategy in self.strategies:
             candidate: CandidateSignal | None = strategy.generate_candidate(context)
             if candidate is None:
@@ -254,8 +263,8 @@ class Backtester:
             plan = strategy.build_trade_plan(candidate, context)
             if plan is None:
                 continue
-            if best is None or plan.reward_risk > best.reward_risk:
-                best = plan
+            if best is None or plan.reward_risk > best[1].reward_risk:
+                best = (candidate, plan)
         return best
 
     def _plan_qty(self, plan: TradePlan, equity: float) -> float:
@@ -307,5 +316,6 @@ class Backtester:
             symbol=pos.symbol, strategy=pos.strategy, direction=pos.direction,
             entry_ts=pos.entry_ts, entry_price=pos.entry_price, exit_ts=ts, exit_price=exit_price,
             exit_reason=reason, qty=pos.qty, pnl=pnl, pnl_pct=pnl_pct,
+            asset_class=pos.asset_class, regime=pos.regime, feature_snapshot=pos.feature_snapshot,
         )
         return trade, cash

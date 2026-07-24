@@ -5,11 +5,12 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
-data/state/*.db
+# The production DB/report ARE committed (like the old bot's
+# trades.xlsx/bot_state.json) so state persists across CI runs -- only
+# transient journal/sidecar files are ignored.
 data/state/*.db-journal
 data/state/*.db-wal
 data/state/*.db-shm
-data/reports/*.xlsx
 data/models/*.pkl
 data/models/*.joblib
 STOP

@@ -36,6 +36,12 @@ def test_backtester_runs_end_to_end_on_trending_symbol():
         assert isinstance(trade, BacktestTrade)
         assert trade.exit_ts >= trade.entry_ts
 
+    # Trades must carry regime + feature_snapshot forward -- the model
+    # trainer (phase 8) needs both to build TrainingExamples from
+    # real backtest history.
+    if result.trades:
+        assert any(t.regime != "MIXED_OR_UNCERTAIN" or t.feature_snapshot for t in result.trades)
+
 
 def test_backtester_never_exceeds_max_positions():
     closes_a = [100 + 0.5 * i for i in range(120)]

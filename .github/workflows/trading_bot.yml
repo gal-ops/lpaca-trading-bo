@@ -3,25 +3,25 @@ name: Alpaca Trading Bot
 on:
   schedule:
     - cron: "*/5 * * * *"   # every 5 minutes, 24/7 -- a full-universe cycle
-                             # can now run long; concurrency below queues
+                             # can run long; concurrency below queues
                              # the next tick instead of racing it, so the
                              # bot settles into whatever cadence a full
                              # scan actually takes rather than a strict 5 min
   workflow_dispatch:         # also lets you trigger it manually in GitHub UI
 
 permissions:
-  contents: write   # needed so the workflow can commit trades.xlsx + bot_state.json back to the repo
+  contents: write   # needed so the workflow can commit the bot's state DB + Excel report back to the repo
 
 concurrency:
   group: alpaca-trading-bot
-  cancel-in-progress: false   # let an overlapping run wait instead of racing the live trade
+  cancel-in-progress: false   # let an overlapping run wait instead of racing the live cycle
 
 jobs:
   trade:
     runs-on: ubuntu-latest
     timeout-minutes: 45      # full universe scan (~13k stocks + 73 crypto,
-                              # batched) plus news lookups and order fills
-                              # needs real headroom over the old 4-symbol scan
+                              # batched) plus screening/strategy evaluation
+                              # and report generation needs real headroom
 
     steps:
       - name: Checkout code
@@ -32,30 +32,32 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
+          cache-dependency-path: alpaca_bot/pyproject.toml
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        working-directory: alpaca_bot
+        run: pip install -e .
 
       - name: Run trading cycle
+        working-directory: alpaca_bot
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          PAPER_TRADING: "true"
           ALPACA_BASE_URL: https://paper-api.alpaca.markets
-          # Optional email alerts -- set these repo secrets to enable (bot runs fine without them):
-          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
-          ALERT_SMTP_USER: ${{ secrets.ALERT_SMTP_USER }}
-          ALERT_SMTP_PASSWORD: ${{ secrets.ALERT_SMTP_PASSWORD }}
-        run: python run_once.py
+          DATABASE_PATH: data/state/alpaca_bot.db
+          ALPACA_BOT_CONFIG: config/paper.yaml
+        run: python -m alpaca_bot.main
 
-      - name: Commit updated trade log and bot state
+      - name: Commit updated state DB and Excel report
         run: |
           git config user.name "trading-bot"
           git config user.email "trading-bot@users.noreply.github.com"
-          git add trades.xlsx bot_state.json 2>/dev/null || true
+          git add alpaca_bot/data/state/alpaca_bot.db alpaca_bot/data/reports/alpaca_bot_report.xlsx 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No changes to commit this cycle."
           else
-            git commit -m "Update trade log + bot state [skip ci]"
+            git commit -m "Update alpaca_bot state + report [skip ci]"
             git pull --rebase
             git push
           fi
