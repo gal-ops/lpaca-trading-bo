@@ -49,6 +49,25 @@ class Database:
         with open(_SCHEMA_PATH) as f:
             self._conn.executescript(f.read())
         self._conn.commit()
+        self._apply_incremental_column_migrations()
+
+    # CREATE TABLE IF NOT EXISTS silently no-ops on a table that already
+    # exists -- a column added to schema.sql after a database was first
+    # created never actually gets applied to that database. This adds any
+    # columns schema.sql expects but an existing table doesn't have yet.
+    # Add an entry here (not just to schema.sql) whenever a new column is
+    # added to an existing table.
+    _INCREMENTAL_COLUMNS: dict[str, list[tuple[str, str]]] = {
+        "signals": [("outcome_label", "INTEGER")],
+    }
+
+    def _apply_incremental_column_migrations(self) -> None:
+        for table, columns in self._INCREMENTAL_COLUMNS.items():
+            existing = {row[1] for row in self._conn.execute(f"PRAGMA table_info({table})")}
+            for column_name, column_type in columns:
+                if column_name not in existing:
+                    self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {column_name} {column_type}")
+        self._conn.commit()
 
     def close(self) -> None:
         self._conn.close()

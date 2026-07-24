@@ -1,11 +1,11 @@
-from .base import CandidateSignal, StrategyContext, TradePlan, ValidationResult
+from .base import CandidateSignal, Strategy, StrategyContext, TradePlan, ValidationResult
 from .mean_reversion import MeanReversionStrategy
 from .news_momentum import NewsMomentumStrategy
 from .opening_range_breakout import OpeningRangeBreakoutStrategy
 from .relative_strength import RelativeStrengthStrategy
 from .vwap_pullback import VwapPullbackStrategy
 
-ALL_STRATEGIES = [
+ALL_STRATEGIES: list[Strategy] = [
     OpeningRangeBreakoutStrategy(),
     VwapPullbackStrategy(),
     MeanReversionStrategy(),
@@ -20,6 +20,7 @@ __all__ = [
     "NewsMomentumStrategy",
     "OpeningRangeBreakoutStrategy",
     "RelativeStrengthStrategy",
+    "Strategy",
     "StrategyContext",
     "TradePlan",
     "ValidationResult",

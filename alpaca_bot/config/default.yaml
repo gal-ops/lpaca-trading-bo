@@ -49,3 +49,6 @@ ranking_weights:
   catalyst_quality: 0.20
   liquidity_notional: 0.15
   spread_execution_quality: 0.10
+
+reporting:
+  output_path: "data/reports/alpaca_bot_report.xlsx"

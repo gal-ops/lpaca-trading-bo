@@ -1,6 +1,7 @@
 """Unit tests for the SQLite persistence layer (spec section 13) and the
 startup unreconciled-state check (spec section 1, rule 6)."""
 
+import sqlite3
 from datetime import datetime, timezone
 
 import pytest
@@ -114,3 +115,42 @@ def test_calibration_bucket_roundtrip(db):
     row = db.get_calibration_bucket("vwap_pullback|long|equity|BULL_TREND")
     assert row["n_examples"] == 250
     assert row["disabled"] == 0
+
+
+def test_incremental_column_migration_adds_missing_column_to_existing_table(tmp_path):
+    """Regression test: CREATE TABLE IF NOT EXISTS silently no-ops on a
+    table that already exists, so a column added to schema.sql after a
+    database was first created never gets applied on its own. Caught live
+    when report generation failed with 'no such column: outcome_label'
+    against a database created before that column was added."""
+    db_path = str(tmp_path / "old_schema.db")
+
+    # Simulate a database created before outcome_label existed.
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE signals (
+            signal_id TEXT PRIMARY KEY, ts TEXT NOT NULL, strategy TEXT NOT NULL,
+            symbol TEXT NOT NULL, asset_class TEXT NOT NULL, direction TEXT NOT NULL,
+            regime TEXT, entry REAL, stop REAL, target REAL, max_holding_seconds REAL,
+            feature_snapshot_json TEXT, raw_model_scores_json TEXT,
+            calibrated_probability REAL, expected_value_after_costs REAL,
+            accepted INTEGER NOT NULL, rejection_reasons_json TEXT, model_version TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+    database = Database(db_path)
+    try:
+        columns = {row[1] for row in database._conn.execute("PRAGMA table_info(signals)")}
+        assert "outcome_label" in columns
+        # And it's actually usable, not just present:
+        database.record_signal({
+            "signal_id": "sig-1", "strategy": "s", "symbol": "AAPL",
+            "asset_class": "stock", "direction": "long", "accepted": True,
+        })
+        database.record_signal_outcome("sig-1", True)
+        row = database.query_one("SELECT outcome_label FROM signals WHERE signal_id = ?", ("sig-1",))
+        assert row["outcome_label"] == 1
+    finally:
+        database.close()

@@ -1,0 +1,14 @@
+services:
+  alpaca-bot:
+    build: .
+    environment:
+      ALPACA_API_KEY: ${ALPACA_API_KEY}
+      ALPACA_SECRET_KEY: ${ALPACA_SECRET_KEY}
+      PAPER_TRADING: "true"
+      ALPACA_BASE_URL: https://paper-api.alpaca.markets
+      DATABASE_PATH: /app/data/state/alpaca_bot.db
+    volumes:
+      - ./data:/app/data
+    # Runs one cycle per container start -- schedule externally (host
+    # cron, GitHub Actions, etc.) rather than looping inside the
+    # container, matching how main.py is designed to be invoked.
